@@ -154,38 +154,142 @@ def api_get_user_by_email(email):
 #Aplicação Flet (UI)
 
 class DonationApp:
-    PRIMARY = "#8A2BE2"      # Roxo forte
+    PRIMARY = "#8A2BE2"      # Roxo forte (botão Sair usa esta cor, conforme pediu)
     ACCENT = "#BA55D3"       # Roxo claro
-    BG = "#0D0D0D"           # Fundo escuro geral
-    CARD_BG = "#1A1A1A"      # Fundo dos cartões
+    BG = "#FFFFFF"           # fundo da página
+    CARD_BG = "#26023F"      # Fundo dos cartões
     TEXT = "white"
 
     def __init__(self, page: ft.Page):
         self.page = page
         page.title = "Paraná — Sistema de Doações"
-        page.window_width = 1000
-        page.window_height = 700
+        page.window.max_width = 1980
+        page.window.min_width = 1280
+        page.window.max_height = 1080
+        page.window.min_height = 720
         page.bgcolor = self.BG
         page.scroll = "auto"
+        page.padding = 0
+        page.assets_dir = "assets"
+        page.fonts = {
+            "Poppins": "assets/fonts/Poppins-Regular.ttf",
+            "PoppinsBold": "assets/fonts/Poppins-Bold.ttf"
+        }
+
+        page.theme = ft.Theme(
+            font_family="Poppins"
+        )
 
         self.data = load_data()
         self.current_user = None
 
-        self.header = ft.Row(
-            [
-                ft.Text("Sistema de Doações", style="headlineSmall", color=self.TEXT),
-                ft.Container(expand=True)
-            ],
-            alignment=ft.MainAxisAlignment.START,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        self.container = ft.Column(
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            expand=True
         )
 
-        self.container = ft.Column()
-        self.page.add(self.header, ft.Divider(color=self.PRIMARY), self.container)
+        self.header = self.build_header()
+
+        self.main_column = ft.Column(
+            [
+                self.header,
+                ft.Container(
+                    expand=True,
+                    alignment=ft.alignment.center,
+                    content=self.container
+                )
+            ],
+            spacing=0,
+            expand=True
+        )
+
+        bg_image_path = "assets/01.png"
+
+        self.page.add(
+            ft.Stack(
+                [
+                    ft.Container(
+                        expand=True,
+                        content=ft.Image(
+                            src=bg_image_path,
+                            fit=ft.ImageFit.FILL,
+                            expand=True
+                        )
+                    ),
+                    self.main_column
+                ],
+                expand=True
+            )
+        )
 
         self.show_login()
 
-    #Layout e Atualização conforme nxessario 
+    def build_header(self):
+        if self.current_user:
+            return ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Text(
+                            "Sistema de Doações",
+                            size=24,
+                            color="white",
+                            font_family="PoppinsBold",
+                        ),
+                        ft.Container(expand=True),
+                        ft.Text(
+                            f"Logado como: {self.current_user.get('name','')} ({self.current_user.get('role','')})",
+                            color="white",
+                            size=14
+                        ),
+                        ft.Container(width=10),
+                        ft.ElevatedButton(
+                            "Sair",
+                            on_click=self.logout,
+                            style=ft.ButtonStyle(bgcolor=self.PRIMARY, color="white")
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                bgcolor=self.CARD_BG,
+                padding=ft.padding.symmetric(horizontal=20),
+                height=70,
+                expand=True,
+                alignment=ft.alignment.center_left,
+                margin=ft.margin.all(0),
+            )
+        else:
+            return ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Text(
+                            "Sistema de Doações",
+                            size=28,
+                            color="white",
+                            font_family="PoppinsBold",
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                bgcolor=self.CARD_BG,
+                padding=ft.padding.symmetric(horizontal=20),
+                height=70,
+                expand=True,
+                alignment=ft.alignment.center_left,
+                margin=ft.margin.all(0),
+            )
+
+    def refresh_header(self):
+        try:
+            self.main_column.controls[0] = self.build_header()
+            self.page.update()
+        except Exception:
+            # fallback: re-add main layout
+            pass
+
+    #Layout e Atualização 
     def clear(self):
         self.container.controls.clear()
 
@@ -197,7 +301,7 @@ class DonationApp:
         self.page.snack_bar = ft.SnackBar(
             ft.Text(msg),
             open=True,
-            bgcolor=self.PRIMARY,
+            bgcolor=self.CARD_BG,
         )
         self.page.update()
 
@@ -219,12 +323,15 @@ class DonationApp:
                 user = api_res.get("user") if isinstance(api_res, dict) else None
                 if user:
                     self.current_user = user
+                    # atualiza o header agora que temos usuário
+                    self.refresh_header()
                     self.snackbar(f"Bem-vindo(a), {user.get('name','')}")
                     self.show_home()
                     return
                 fetched = api_get_user_by_email_and_merge(email.value.strip())
                 if fetched:
                     self.current_user = fetched
+                    self.refresh_header()
                     self.snackbar(f"Bem-vindo(a), {fetched.get('name','')}")
                     self.show_home()
                     return
@@ -233,6 +340,7 @@ class DonationApp:
                 self.snackbar("E-mail ou senha inválidos")
                 return
             self.current_user = u
+            self.refresh_header()
             self.snackbar(f"Bem-vindo(a), {u['name']}")
             self.show_home()
 
@@ -248,31 +356,41 @@ class DonationApp:
             style=ft.ButtonStyle(color=self.ACCENT)
         )
 
-        card = ft.Card(
-            ft.Container(
-                ft.Column(
-                    [
-                        ft.Text("💜 Sistema de Doações Paraná", style="headlineMedium", color=self.TEXT),
-                        ft.Text("Ajuda humanitária aos desabrigados da cidade de Rio Bonito do Iguaçu", color=self.ACCENT),
-                        ft.Divider(color=self.PRIMARY),
-                        email,
-                        password,
-                        ft.Row([login_btn, register_btn], alignment=ft.MainAxisAlignment.CENTER),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=15,
-                ),
-                padding=30,
-                bgcolor=self.CARD_BG,
-                border_radius=15,
-                alignment=ft.alignment.center,
+        card_inner = ft.Container(
+            ft.Column(
+                [
+                    ft.Text(
+                        "Sistema de Doações Paraná",
+                        style="headlineMedium",
+                        color=self.TEXT,
+                        text_align=ft.TextAlign.CENTER
+                    ),
+                    ft.Text(
+                        "Plataforma de auxílio às vítimas do tornado em Rio Bonito do Iguaçu, "
+                        "conectamos voluntários e doadores de forma rápida e transparente.",
+                        color=self.ACCENT,
+                        text_align=ft.TextAlign.CENTER
+                    ),
+                    ft.Divider(color=self.PRIMARY),
+                    email,
+                    password,
+                    ft.Row([login_btn, register_btn],
+                        alignment=ft.MainAxisAlignment.CENTER),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=15,
             ),
-            elevation=8
+            padding=30,
+            bgcolor=self.CARD_BG,
+            border_radius=15,
+            alignment=ft.alignment.center,
+            width=500,
         )
 
-        self.container.controls.append(
-            ft.Container(expand=True, alignment=ft.alignment.center, content=card)
-        )
+        card = ft.Card(card_inner, elevation=8, margin=ft.margin.only(top=80))
+
+        self.container.controls.append(card)
+        # header já está no estado correto aqui (não-logado)
         self.update()
 
     # REGISTRO
@@ -286,15 +404,23 @@ class DonationApp:
             options=[
                 ft.dropdown.Option("doador", "Doador"),
                 ft.dropdown.Option("receptor", "Receptor")
-            ],
+            ]
+            ,
+            border_color=self.PRIMARY, focused_border_color=self.ACCENT,
         )
 
-        name = ft.TextField(label="Nome/Razão Social", width=400, color=self.TEXT)
-        email = ft.TextField(label="E-mail", width=400, color=self.TEXT)
-        cpf_cnpj = ft.TextField(label="CPF/CNPJ", width=400, color=self.TEXT)
-        cep = ft.TextField(label="CEP", width=300, color=self.TEXT)
-        password = ft.TextField(label="Senha", width=400, password=True, can_reveal_password=True, color=self.TEXT)
-        description = ft.TextField(label="Motivo/Descrição", width=400, multiline=True, color=self.TEXT)
+        name = ft.TextField(label="Nome/Razão Social", width=400, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        email = ft.TextField(label="E-mail", width=400, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        cpf_cnpj = ft.TextField(label="CPF/CNPJ", width=400, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        cep = ft.TextField(label="CEP", width=300, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        password = ft.TextField(label="Senha", width=400, password=True, can_reveal_password=True, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        description = ft.TextField(label="Motivo/Descrição", width=400, multiline=True, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
 
         def on_role_change(e):
             vis = (role.value == "receptor")
@@ -349,19 +475,40 @@ class DonationApp:
         btn_back = ft.TextButton("Voltar", on_click=lambda e: self.show_login(),
                                  style=ft.ButtonStyle(color=self.ACCENT))
 
-        card = ft.Card(
-            ft.Container(
-                ft.Column([
-                    ft.Text("Registrar nova conta", style="titleLarge", color=self.TEXT),
-                    role, name, email, cpf_cnpj, cep, password, description,
-                    ft.Row([btn_register, btn_back])
-                ]),
-                padding=20,
-                bgcolor=self.CARD_BG,
-                border_radius=12
+        card_inner = ft.Container(
+            ft.Column(
+                [
+                    ft.Text(
+                        "Registrar nova conta",
+                        style="headlineMedium",
+                        color=self.TEXT
+                    ),
+                    ft.Text(
+                        "Preencha os dados para criar sua conta",
+                        color=self.ACCENT,
+                        text_align=ft.TextAlign.CENTER
+                    ),
+                    ft.Divider(color=self.PRIMARY),
+                    role,
+                    name,
+                    email,
+                    cpf_cnpj,
+                    cep,
+                    password,
+                    description,
+                    ft.Row([btn_register, btn_back], alignment=ft.MainAxisAlignment.CENTER),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=15,
             ),
-            elevation=2
+            padding=30,
+            bgcolor=self.CARD_BG,
+            border_radius=15,
+            alignment=ft.alignment.center,
+            width=500,
         )
+
+        card = ft.Card(card_inner, elevation=8, margin=ft.margin.only(top=80))
 
         self.container.controls.append(card)
         self.update()
@@ -371,17 +518,6 @@ class DonationApp:
         self.clear()
         u = self.current_user
 
-        top = ft.Row(
-            [
-                ft.Text(f"Logado como: {u['name']} ({u['role']})", color=self.TEXT),
-                ft.Container(expand=True),
-                ft.ElevatedButton("Sair", on_click=self.logout,
-                                  style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT))
-            ]
-        )
-
-        self.container.controls.append(top)
-
         if u["role"] == "receptor":
             self.show_receptor_dashboard()
         elif u["role"] == "doador":
@@ -389,78 +525,93 @@ class DonationApp:
         elif u["role"] == "admin":
             self.show_admin_panel()
 
+        self.refresh_header()
         self.update()
 
     def logout(self, e=None):
         self.current_user = None
+        self.refresh_header()
         self.show_login()
 
     # RECEPTORES
     def show_receptor_dashboard(self):
         u = self.current_user
 
+        self.clear()
+
+        # Card de edição da chave PIX
         pix_tf = ft.TextField(
-            label="Chave PIX (para receber)",
+            label="Chave PIX",
             value=u.get("pix_key", ""),
             width=400,
-            color=self.TEXT
+            color=self.TEXT,
+            border_color=self.PRIMARY, focused_border_color=self.ACCENT
         )
 
         def save_pix(ev):
             u["pix_key"] = pix_tf.value.strip()
             api_res = api_update_user(u["id"], u)
-            if api_res is not None:
+            if api_res:
                 self.data = load_data()
-                self.snackbar("Chave PIX salva (via API).")
-                return
+            else:
+                save_local_data(self.data)
+            self.snackbar("Chave PIX atualizada!")
 
-            save_local_data(self.data)
-            self.snackbar("Chave PIX salva (local).")
-
-        btn_pix = ft.ElevatedButton(
-            "Salvar PIX",
-            on_click=save_pix,
-            style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT)
+        pix_card = ft.Card(
+            ft.Container(
+                ft.Column(
+                    [
+                        ft.Text("Informações de Recebimento", style="headlineSmall", color=self.TEXT),
+                        ft.Divider(color=self.PRIMARY),
+                        pix_tf,
+                        ft.Row(
+                            [
+                                ft.ElevatedButton(
+                                    "Salvar PIX",
+                                    on_click=save_pix,
+                                    style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT)
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER
+                        )
+                    ],
+                    spacing=15,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                padding=25,
+                bgcolor=self.CARD_BG,
+                border_radius=15,
+                width=550
+            ),
+            elevation=4,
+            margin=ft.margin.only(bottom=25, top=15)
         )
+        self.container.controls.append(pix_card)
 
-        # COTAS
-        title = ft.TextField(
-            label="Título da cota",
-            width=400,
-            color=self.TEXT
-        )
+        # Card de criação de cotas
+        title = ft.TextField(label="Título da Cota", width=400, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        value = ft.TextField(label="Valor (ex: 50.00)", width=400, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
+        desc = ft.TextField(label="Descrição", width=400, multiline=True, height=100, color=self.TEXT,
+                                border_color=self.PRIMARY, focused_border_color=self.ACCENT)
 
-        value = ft.TextField(
-            label="Valor (ex: 50.00)",
-            width=200,
-            color=self.TEXT
-        )
-
-        desc = ft.TextField(
-            label="Descrição da cota",
-            width=400,
-            height=80,
-            multiline=True,
-            color=self.TEXT
-        )
-
-        # CRIAÇÃO DAS COTAS 
         def create_cause(ev):
             t = title.value.strip()
             v = value.value.strip().replace(",", ".")
             d = desc.value.strip()
 
             if not t or not v:
-                self.snackbar("Título e valor são obrigatórios.")
+                self.snackbar("Preencha título e valor.")
                 return
 
             try:
                 v_float = float(v)
             except:
-                self.snackbar("Valor inválido. Use apenas números, ex: 50.00")
+                self.snackbar("Valor inválido. Ex: 50.00")
                 return
 
-            new = {
+            new_cause = {
                 "id": str(uuid.uuid4()),
                 "receptor_id": u["id"],
                 "title": t,
@@ -468,162 +619,221 @@ class DonationApp:
                 "value": v_float
             }
 
-            # tenta criar via API
-            api_res = api_create_cause(new)
-            if api_res is not None:
+            api_res = api_create_cause(new_cause)
+            if api_res:
                 self.data = load_data()
-                title.value = ""
-                value.value = ""
-                desc.value = ""
-                self.snackbar("Cota criada com sucesso (via API)!")
-                self.show_home()
-                return
-
-            # fallback local
-            self.data["causes"].append(new)
-            save_local_data(self.data)
+            else:
+                self.data["causes"].append(new_cause)
+                save_local_data(self.data)
 
             title.value = ""
             value.value = ""
             desc.value = ""
-            self.snackbar("Cota criada com sucesso (local)!")
+            self.snackbar("Cota criada com sucesso!")
             self.show_home()
 
-        btn_create = ft.ElevatedButton(
-            "Criar cota",
-            on_click=create_cause,
-            style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT)
+        create_cause_card = ft.Card(
+            ft.Container(
+                ft.Column(
+                    [
+                        ft.Text("Criar nova Cota", style="headlineMedium", color=self.TEXT),
+                        ft.Text("Preencha os dados da cota para publicá-la", color=self.ACCENT),
+                        ft.Divider(color=self.PRIMARY),
+                        title,
+                        value,
+                        desc,
+                        ft.Row(
+                            [ft.ElevatedButton("Criar Cota", on_click=create_cause,
+                                            style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT))],
+                            alignment=ft.MainAxisAlignment.CENTER
+                        )
+                    ],
+                    spacing=15,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                padding=25,
+                bgcolor=self.CARD_BG,
+                border_radius=15,
+                width=550
+            ),
+            elevation=4,
+            margin=ft.margin.only(bottom=25)
         )
+        self.container.controls.append(create_cause_card)
 
+        # Minhas cotas (lista)
         my_causes = [c for c in self.data["causes"] if c["receptor_id"] == u["id"]]
-        causes_list = ft.Column()
+        list_column = ft.Column(spacing=10)
 
         for c in my_causes:
-
-            def delete_closure(cid):
+            def delete_factory(cid):
                 def delete(ev):
-                    # tenta deletar via API
                     api_res = api_delete_cause(cid)
-                    if api_res is not None:
+                    if api_res:
                         self.data = load_data()
-                        self.snackbar("Cota removida (via API).")
-                        self.show_home()
-                        return
-                    # fallback local
-                    self.data["causes"] = [x for x in self.data["causes"] if x["id"] != cid]
-                    save_local_data(self.data)
-                    self.snackbar("Cota removida (local).")
+                    else:
+                        self.data["causes"] = [x for x in self.data["causes"] if x["id"] != cid]
+                        save_local_data(self.data)
+                    self.snackbar("Cota removida.")
                     self.show_home()
                 return delete
 
-            card = ft.Card(
+            item = ft.Card(
                 ft.Container(
-                    ft.Row([
-                        ft.Column([
+                    ft.Column(
+                        [
                             ft.Text(c["title"], style="titleMedium", color=self.TEXT),
-                            ft.Text(f"Valor: R$ {c['value']:.2f}", color=self.TEXT),
+                            ft.Text(f"R$ {c['value']:.2f}", color=self.TEXT),
                             ft.Text(c["description"], color=self.TEXT),
-                        ], expand=True),
-                        ft.ElevatedButton(
-                            "Excluir",
-                            on_click=delete_closure(c["id"]),
-                            style=ft.ButtonStyle(bgcolor=self.ACCENT, color=self.TEXT)
-                        )
-                    ]),
-                    padding=12,
-                    bgcolor=self.CARD_BG
+                            ft.Row(
+                                [
+                                    ft.ElevatedButton(
+                                        "Excluir",
+                                        on_click=delete_factory(c["id"]),
+                                        style=ft.ButtonStyle(bgcolor=self.ACCENT, color=self.TEXT)
+                                    )
+                                ],
+                                alignment=ft.MainAxisAlignment.END
+                            )
+                        ],
+                        spacing=8
+                    ),
+                    padding=15,
+                    bgcolor=self.CARD_BG,
+                    border_radius=10
                 ),
-                elevation=1
+                elevation=2
             )
 
-            causes_list.controls.append(card)
+            list_column.controls.append(item)
 
-        self.container.controls.extend([
-            ft.Text("Painel do Receptor", style="headlineSmall", color=self.TEXT),
-            ft.Row([pix_tf, btn_pix]),
-            ft.Divider(color=self.PRIMARY),
+        list_card = ft.Card(
+            ft.Container(
+                ft.Column(
+                    [
+                        ft.Text("Minhas Cotas Publicadas", style="headlineSmall", color=self.TEXT),
+                        ft.Divider(color=self.PRIMARY),
+                        list_column
+                    ],
+                    spacing=15
+                ),
+                padding=25,
+                bgcolor=self.CARD_BG,
+                border_radius=15,
+                width=650
+            ),
+            elevation=4
+        )
 
-            ft.Text("Criar nova cota", style="titleMedium", color=self.TEXT),
-            title, value, desc, btn_create,
+        self.container.controls.append(list_card)
+        self.refresh_header()
+        self.update()
 
-            ft.Divider(color=self.PRIMARY),
-
-            ft.Text("Minhas cotas", style="titleMedium", color=self.TEXT),
-            causes_list
-        ])
 
     # DOADORES
     def show_donor_feed(self):
         u = self.current_user
 
+        self.clear()
+
         self.container.controls.append(
-            ft.Text("Feed de causas", style="headlineSmall", color=self.TEXT)
+            ft.Container(
+                content=ft.Text(
+                    "Feed de causas",
+                    color=self.TEXT,
+                    font_family="PoppinsBold",
+                    size=22
+                ),
+                padding=10,
+                bgcolor=self.CARD_BG,
+                border_radius=10,
+                margin=ft.margin.only(bottom=25, top=15)
+            )
         )
 
-        # tenta carregar causas da API 
         api_causes = api_get("/causes")
         if api_causes is not None and isinstance(api_causes, list):
-            all_causes = sorted(api_causes, key=lambda x: x.get("title",""))
+            causes = sorted(api_causes, key=lambda x: x.get("title", ""))
         else:
-            all_causes = sorted(self.data["causes"], key=lambda x: x["title"])
+            causes = sorted(self.data["causes"], key=lambda x: x["title"])
 
-        feed = ft.Column()
+        rows = ft.Column(spacing=12)
 
-        for c in all_causes:
-            receptor = get_user_by_id_local(self.data, c["receptor_id"]) or {"name": "—"}
-            fav = c["id"] in u.get("favorites", [])
+        cols = 3
+        card_width = 260
 
-            fav_color = self.ACCENT if fav else self.CARD_BG
+        for i in range(0, len(causes), cols):
+            line = causes[i:i+cols]
+            row_items = []
 
-            def toggle(ev, cid=c["id"]):
-                if cid in u.get("favorites", []):
-                    u["favorites"].remove(cid)
-                else:
-                    u.setdefault("favorites", []).append(cid)
-           
-                api_res = api_update_user(u["id"], u)
-                if api_res is not None:
-                    self.data = load_data()
-                    self.show_home()
-                    return
-                
-                save_local_data(self.data)
-                self.show_home()
+            for c in line:
+                receptor = get_user_by_id_local(self.data, c["receptor_id"]) or {"name": "—"}
+                fav = c["id"] in u.get("favorites", [])
+                fav_text = "Desfavoritar" if fav else "Favoritar"
+                fav_color = self.ACCENT if fav else self.CARD_BG
 
-            card = ft.Card(
-                ft.Container(
-                    ft.Row([
-                        ft.Column([
-                            ft.Text(c["title"], style="titleMedium", color=self.TEXT),
-                            ft.Text(c["description"], color=self.TEXT),
-                            ft.Text(f"Valor: R$ {c['value']:.2f}", color=self.TEXT),
-                            ft.Text(f"Receptor: {receptor.get('name','')}", color=self.TEXT),
-                        ], expand=True),
-                        ft.Column([
-                            ft.ElevatedButton(
-                                "Desfavoritar" if fav else "Favoritar",
-                                on_click=toggle,
-                                style=ft.ButtonStyle(
-                                    bgcolor=fav_color,
-                                    color=self.TEXT,
-                                    elevation=3,
-                                    shape=ft.RoundedRectangleBorder(radius=12)
+                def toggle_factory(cid):
+                    def toggle(ev):
+                        if cid in u.get("favorites", []):
+                            u["favorites"].remove(cid)
+                        else:
+                            u.setdefault("favorites", []).append(cid)
+
+                        api_res = api_update_user(u["id"], u)
+                        if api_res:
+                            self.data = load_data()
+                            self.show_home()
+                            return
+
+                        save_local_data(self.data)
+                        self.show_home()
+                    return toggle
+
+                toggle_fn = toggle_factory(c["id"])
+
+                card = ft.Card(
+                    ft.Container(
+                        ft.Column(
+                            [
+                                ft.Text(c["title"], style="titleMedium", color=self.TEXT, text_align=ft.TextAlign.CENTER),
+                                ft.Text(c["description"], color=self.TEXT, max_lines=2, overflow="ellipsis", text_align=ft.TextAlign.CENTER),
+                                ft.Text(f"Valor: R$ {c['value']:.2f}", color=self.TEXT, text_align=ft.TextAlign.CENTER),
+                                ft.Text(f"Receptor: {receptor['name']}", color=self.TEXT, text_align=ft.TextAlign.CENTER),
+                                ft.ElevatedButton(
+                                    fav_text,
+                                    on_click=toggle_fn,
+                                    width=150,
+                                    style=ft.ButtonStyle(bgcolor=fav_color, color=self.TEXT)
                                 )
-                            ),
-                        ])
-                    ]),
-                    padding=12,
-                    bgcolor=self.CARD_BG
-                ),
-                elevation=1
+                            ],
+                            spacing=5,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                        ),
+                        padding=12,
+                        bgcolor=self.CARD_BG,
+                        width=card_width,
+                        height=220,
+                        border_radius=15
+                    ),
+                    elevation=2,
+                )
+
+                row_items.append(card)
+
+            while len(row_items) < cols:
+                row_items.append(ft.Container(width=card_width))
+
+            rows.controls.append(
+                ft.Row(row_items, alignment=ft.MainAxisAlignment.CENTER)
             )
 
-            feed.controls.append(card)
-
-        self.container.controls.append(feed)
+        self.container.controls.append(rows)
+        self.refresh_header()
+        self.update()
 
     # ADMIN
     def show_admin_panel(self):
+        self.clear()
         self.container.controls.append(ft.Text("Painel do Administrador",style="headlineSmall", color=self.TEXT))
 
         users_list = ft.Column()
@@ -671,6 +881,8 @@ class DonationApp:
             users_list.controls.append(card)
 
         self.container.controls.append(users_list)
+        self.refresh_header()
+        self.update()
 
 
 def api_get_user_by_email_and_merge(email):
