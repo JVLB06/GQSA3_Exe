@@ -16,6 +16,10 @@ def _headers():
         h["Authorization"] = f"Bearer {ACCESS_TOKEN}"
     return h
 
+def float_format(value)-> float:
+    str(value).replace(",",".")
+    return float(value)
+
 def api_get(path):
     try:
         r = requests.get(f"{API_URL}{path}", headers=_headers(), timeout=REQ_TIMEOUT)
@@ -86,7 +90,8 @@ def api_register_user(user_dict):
 
 def api_add_pix(pix_value):
     payload = {
-        "PixKey": pix_value,
+        "UserId" : 0,
+        "PixKey": str(pix_value),
         "KeyType": "cpf",
         "CreatedAt": datetime.now().isoformat()
     }
@@ -98,9 +103,10 @@ def api_delete_pix():
 
 def api_create_product(prod):
     payload = {
+        "CauseId" : 0,
         "Name": prod.get("title"),
         "Description": prod.get("description"),
-        "Value": prod.get("value")
+        "Value": float_format(prod.get("value"))
     }
     return api_post("/receiver/create_product", payload)
 
@@ -510,13 +516,13 @@ class DonationApp:
                     return
 
                 btn.text = "Desfavoritar"
-                btn.bgcolor = ft.colors.GREEN
+                btn.bgcolor = ft.Colors.GREEN
                 btn.update()
                 self.snackbar("Causa favoritada!")
 
             fav_button = ft.ElevatedButton(
                 text="Desfavoritar" if is_fav else "Favoritar",
-                bgcolor=ft.colors.GREEN if is_fav else self.ACCENT,
+                bgcolor=ft.Colors.GREEN if is_fav else self.ACCENT,
                 color=self.TEXT,
                 on_click=toggle_favorite
             )
