@@ -80,11 +80,11 @@ def api_register_user(user_dict):
     payload = {
         "Email": user_dict.get("email"),
         "Password": user_dict.get("password"),
-        "IsReceiver": user_dict.get("role"),
+        "IsReceiver": user_dict.get("role") == "receptor",
         "Name": user_dict.get("name"),
         "Document": user_dict.get("cpf_cnpj") if user_dict.get("role") == "receptor" else None,
         "Address": user_dict.get("cep") if user_dict.get("role") == "receptor" else None,
-        "Cause": None
+        "Cause": user_dict.get("description") if user_dict.get("role") == "receptor" else None # Adicionado 'description' para 'Cause'
     }
     return api_post("/cadastrate", payload)
 
@@ -230,16 +230,29 @@ class DonationApp:
         email = ft.TextField(label="E-mail", width=350, color=self.TEXT, border_color=self.PRIMARY, focused_border_color=self.ACCENT)
         password = ft.TextField(label="Senha", width=350, password=True, can_reveal_password=True, color=self.TEXT, border_color=self.PRIMARY, focused_border_color=self.ACCENT)
 
+    
         def do_login(ev):
             global ACCESS_TOKEN
             res = api_login(email.value.strip(), password.value)
+
             if res is None:
                 self.snackbar("Falha ao comunicar com o backend (login).")
                 return
+
             if "access_token" in res:
                 ACCESS_TOKEN = res.get("access_token")
+
                 role = self.detect_role()
-                self.current_user = {"email": res.get("user"), "name": res.get("user"), "role": role}
+
+                if role is None:
+                     return 
+
+                self.current_user = {
+                    "email": res.get("user"),
+                    "name": res.get("user"),
+                    "role": role
+                }
+
                 self.refresh_header()
                 self.snackbar(f"Bem-vindo(a), {self.current_user.get('name')}")
                 self.show_home()
@@ -247,6 +260,7 @@ class DonationApp:
             else:
                 self.snackbar("Login inválido.")
                 return
+
 
         login_btn = ft.ElevatedButton("Entrar", on_click=do_login, width=150, style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT))
         register_btn = ft.TextButton("Criar conta", on_click=lambda e: self.show_register(), style=ft.ButtonStyle(color=self.ACCENT))
@@ -441,7 +455,7 @@ class DonationApp:
         self.container.controls.append(
             ft.Container(
                 content=ft.Text(
-                    "Feed de causas",
+                    "Causas disponíveis",
                     color=self.TEXT,
                     font_family="PoppinsBold",
                     size=26,
@@ -464,93 +478,103 @@ class DonationApp:
         else:
             receivers = []
 
-        all_products = []
+        list_column = ft.Column(spacing=20)
 
         for r in receivers:
             rid = r.get("UserId") or r.get("id_usuario") or r.get("Id")
             receptor_nome = r.get("Name") or r.get("nome") or "Receptor"
+            receptor_desc = r.get("Description") or r.get("descricao") or "Sem descrição"
 
+            # CORRETO AGORA:
             prods = api_get_cause_products(rid)
+
+            prod_list = []
 
             if isinstance(prods, list):
                 for p in prods:
-                    all_products.append({
-                        "CauseId": rid,
-                        "Receptor": receptor_nome,
-                        "ProductId": p.get("ProductId") or p.get("id"),
-                        "Name": p.get("ProductName") or p.get("name"),
-                        "Description": p.get("Description") or p.get("description"),
-                        "Value": float(p.get("Value") or p.get("value") or 0)
-                    })
 
-        grid = ft.Row(
-            wrap=True,
-            spacing=20,
-            run_spacing=20,
-            alignment=ft.MainAxisAlignment.CENTER
-        )
+                    def donate(ev, prod=p):
+                        dlg_value = ft.TextField(label="Valor da doação", width=200)
 
-        favs = api_list_favorites() or []
+                        def confirm(ev2):
+                            if not dlg_value.value.strip():
+                                self.snackbar("Informe um valor.")
+                                return
+                            payload = {
+                                "ReceiverId": rid,
+                                "ProductId": prod.get("ProductId") or prod.get("id"),
+                                "Amount": float(dlg_value.value.replace(",", ".")),
+                                "Message": ""
+                            }
+                            res = api_add_donation(payload)
+                            if res is None:
+                                self.snackbar("Erro ao registrar doação.")
+                            else:
+                                self.snackbar("Doação realizada com sucesso!")
 
-        fav_names = {f.get("CauseName") for f in favs}
+                            dlg.open = False
+                            self.update()
 
-        for prod in all_products:
+                        dlg = ft.AlertDialog(
+                            title=ft.Text("Realizar Doação"),
+                            content=dlg_value,
+                            actions=[
+                                ft.TextButton("Cancelar", on_click=lambda e: close_dlg()),
+                                ft.ElevatedButton("Confirmar", on_click=confirm)
+                            ]
+                        )
 
-            is_fav = prod["Receptor"] in fav_names
+                        def close_dlg():
+                            dlg.open = False
+                            self.update()
 
-            def toggle_favorite(ev, p=prod, initial_fav=is_fav):
-                btn = ev.control
+                        self.page.dialog = dlg
+                        dlg.open = True
+                        self.update()
 
-                if btn.text == "Desfavoritar":
-                    btn.text = "Favoritar"
-                    btn.bgcolor = self.ACCENT
-                    btn.disabled = False
-                    btn.update()
-                    self.snackbar("Desfavoritado (modo visual).")
-                    return
+                    prod_list.append(
+                        ft.Container(
+                            bgcolor="#3b0057",
+                            padding=10,
+                            border_radius=10,
+                            content=ft.Column([
+                                ft.Text(p.get("ProductName") or p.get("name"),
+                                        color="white", size=18),
+                                ft.Text(p.get("Description") or p.get("description"),
+                                        color="white"),
+                                ft.Text(f"Valor: R$ {float(p.get('Value') or p.get('value') or 0):.2f}",
+                                        color="white"),
+                                ft.Container(height=5),
+                                ft.ElevatedButton("Doar", bgcolor=self.PRIMARY, color=self.TEXT,
+                                                on_click=donate)
+                            ])
+                        )
+                    )
 
-                res = api_favorite_cause(p["CauseId"])
-
-                if res is None:
-                    self.snackbar("Erro ao favoritar.")
-                    return
-
-                btn.text = "Desfavoritar"
-                btn.bgcolor = ft.Colors.GREEN
-                btn.update()
-                self.snackbar("Causa favoritada!")
-
-            fav_button = ft.ElevatedButton(
-                text="Desfavoritar" if is_fav else "Favoritar",
-                bgcolor=ft.Colors.GREEN if is_fav else self.ACCENT,
-                color=self.TEXT,
-                on_click=toggle_favorite
+            # AGORA 100% correto
+            expansion = ft.ExpansionTile(
+                title=ft.Text(receptor_nome, size=20, color=self.TEXT),
+                subtitle=ft.Text(receptor_desc, color=self.ACCENT),
+                controls=prod_list
             )
 
-            card = ft.Container(
-                width=260,
-                padding=20,
-                bgcolor=self.CARD_BG,
-                border_radius=15,
-                content=ft.Column([
-                    ft.Text(prod["Name"], size=20, color=self.TEXT, weight=ft.FontWeight.BOLD),
-                    ft.Text(prod["Description"], size=14, color=self.TEXT),
-                    ft.Text(f"Valor: R$ {prod['Value']:.2f}", color=self.TEXT),
-                    ft.Text(f"Receptor: {prod['Receptor']}", color=self.TEXT),
-                    ft.Container(height=10),
-                    fav_button
-                ],
-                spacing=8,
-                alignment=ft.MainAxisAlignment.CENTER)
+            list_column.controls.append(
+                ft.Card(
+                    ft.Container(
+                        content=expansion,
+                        padding=15,
+                        bgcolor=self.CARD_BG,
+                        border_radius=15
+                    ),
+                    elevation=4
+                )
             )
 
-            grid.controls.append(card)
-
-        self.container.controls.append(grid)
-
+        self.container.controls.append(list_column)
         self.refresh_header()
         self.update()
-
+    
+       
 def main(page: ft.Page):
     DonationApp(page)
 
