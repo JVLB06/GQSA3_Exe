@@ -80,7 +80,7 @@ def api_register_user(user_dict):
     payload = {
         "Email": user_dict.get("email"),
         "Password": user_dict.get("password"),
-        "IsReceiver": user_dict.get("role") == "receptor",
+        "IsReceiver": user_dict.get("role"),
         "Name": user_dict.get("name"),
         "Document": user_dict.get("cpf_cnpj") if user_dict.get("role") == "receptor" else None,
         "Address": user_dict.get("cep") if user_dict.get("role") == "receptor" else None,
@@ -236,8 +236,18 @@ class DonationApp:
             res = api_login(email.value.strip(), password.value)
 
             if res is None:
-                self.snackbar("Falha ao comunicar com o backend (login).")
+                error_msg.value = "Falha ao comunicar com o servidor."
+                error_msg.visible = True
+                self.update()
                 return
+            
+            if isinstance(res, dict) and res.get("error"):
+                error_msg.value = "E-mail ou senha incorretos."
+                error_msg.visible = True
+                self.update()
+                return
+
+            error_msg.visible = False         
 
             if "access_token" in res:
                 ACCESS_TOKEN = res.get("access_token")
@@ -265,14 +275,20 @@ class DonationApp:
         login_btn = ft.ElevatedButton("Entrar", on_click=do_login, width=150, style=ft.ButtonStyle(bgcolor=self.PRIMARY, color=self.TEXT))
         register_btn = ft.TextButton("Criar conta", on_click=lambda e: self.show_register(), style=ft.ButtonStyle(color=self.ACCENT))
 
-        card_inner = ft.Container(ft.Column([
-            ft.Text("Sistema de Doações Paraná", style="headlineMedium", color=self.TEXT, text_align=ft.TextAlign.CENTER),
-            ft.Text("Plataforma de auxílio", color=self.ACCENT, text_align=ft.TextAlign.CENTER),
-            ft.Divider(color=self.PRIMARY),
-            email, password,
-            ft.Row([login_btn, register_btn], alignment=ft.MainAxisAlignment.CENTER)
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=15),
-            padding=30, bgcolor=self.CARD_BG, border_radius=15, alignment=ft.alignment.center, width=500)
+        error_msg = ft.Text("", color="red", size=14, visible=False, text_align=ft.TextAlign.CENTER)
+
+        card_inner = ft.Container(
+            ft.Column([
+                ft.Text("Sistema de Doações Paraná", style="headlineMedium", color=self.TEXT, text_align=ft.TextAlign.CENTER),
+                ft.Text("Plataforma de auxílio", color=self.ACCENT, text_align=ft.TextAlign.CENTER),
+                ft.Divider(color=self.PRIMARY),
+                email, password,
+                error_msg,
+                ft.Row([login_btn, register_btn], alignment=ft.MainAxisAlignment.CENTER)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=15),
+            padding=30, bgcolor=self.CARD_BG, border_radius=15, alignment=ft.alignment.center, width=500
+        )
+
 
         card = ft.Card(card_inner, elevation=8, margin=ft.margin.only(top=80))
         self.container.controls.append(card)
@@ -465,7 +481,8 @@ class DonationApp:
                 bgcolor=self.CARD_BG,
                 border_radius=10,
                 margin=ft.margin.only(bottom=25, top=15),
-                alignment=ft.alignment.center
+                alignment=ft.alignment.center,      # ← centraliza o conteúdo dentro do container
+                width=600                           # ← opcional: define largura para centralizar visualmente
             )
         )
 
