@@ -280,7 +280,7 @@ class DonationApp:
         card_inner = ft.Container(
             ft.Column([
                 ft.Text("Sistema de Doações Paraná", style="headlineMedium", color=self.TEXT, text_align=ft.TextAlign.CENTER),
-                ft.Text("Plataforma de auxílio", color=self.ACCENT, text_align=ft.TextAlign.CENTER),
+                ft.Text("Plataforma de auxílio às vítimas do tornado.", color=self.ACCENT, text_align=ft.TextAlign.CENTER),
                 ft.Divider(color=self.PRIMARY),
                 email, password,
                 error_msg,
@@ -392,6 +392,9 @@ class DonationApp:
             if not val:
                 self.snackbar("Preencha a chave PIX.")
                 return
+                print("DEBUG: Enviando pix:", val)
+                res = api_add_pix(val)
+                print("DEBUG: resposta api_add_pix ->", res)
             res = api_add_pix(val)
             if res is None:
                 self.snackbar("Erro ao salvar PIX.")
@@ -460,7 +463,7 @@ class DonationApp:
         else:
             list_column.controls.append(ft.Text("Nenhum produto encontrado.", color=self.TEXT))
 
-        list_card = ft.Card(ft.Container(ft.Column([ft.Text("Meus Produtos", style="headlineSmall", color=self.TEXT), ft.Divider(color=self.PRIMARY), list_column], spacing=15), padding=25, bgcolor=self.CARD_BG, border_radius=15, width=650), elevation=4)
+        list_card = ft.Card(ft.Container(ft.Column([ft.Text("Produtos Cadastrados", style="headlineSmall", color=self.TEXT), ft.Divider(color=self.PRIMARY), list_column], spacing=15), padding=25, bgcolor=self.CARD_BG, border_radius=15, width=650), elevation=4)
         self.container.controls.append(list_card)
         self.refresh_header()
         self.update()
