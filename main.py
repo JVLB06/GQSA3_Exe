@@ -84,7 +84,7 @@ def api_register_user(user_dict):
         "Name": user_dict.get("name"),
         "Document": user_dict.get("cpf_cnpj") if user_dict.get("role") == "receptor" else None,
         "Address": user_dict.get("cep") if user_dict.get("role") == "receptor" else None,
-        "Cause": user_dict.get("description") if user_dict.get("role") == "receptor" else None # Adicionado 'description' para 'Cause'
+        "Cause": user_dict.get("description") if user_dict.get("role") == "receptor" else None
     }
     return api_post("/cadastrate", payload)
 
@@ -485,73 +485,147 @@ class DonationApp:
             receptor_nome = r.get("Name") or r.get("nome") or "Receptor"
             receptor_desc = r.get("Description") or r.get("descricao") or "Sem descrição"
 
-            # CORRETO AGORA:
             prods = api_get_cause_products(rid)
 
             prod_list = []
 
             if isinstance(prods, list):
                 for p in prods:
+                    product_name = p.get("ProductName") or p.get("name")
+                    product_desc = p.get("Description") or p.get("description")
+                    product_value = float(p.get("Value") or p.get("value") or 0.0)
 
-                    def donate(ev, prod=p):
-                        dlg_value = ft.TextField(label="Valor da doação", width=200)
+                    # Campos do formulário de doação por produto
+                    value_tf = ft.TextField(
+                        label="Valor da doação",
+                        width=200,
+                        keyboard_type=ft.KeyboardType.NUMBER,
+                        bgcolor="#4b0a6d",
+                        color="white",
+                        border_color=self.ACCENT,
+                    )
+                    msg_tf = ft.TextField(
+                        label="Mensagem (opcional)",
+                        width=300,
+                        multiline=True,
+                        bgcolor="#4b0a6d",
+                        color="white",
+                        border_color=self.ACCENT,
+                    )
 
-                        def confirm(ev2):
-                            if not dlg_value.value.strip():
-                                self.snackbar("Informe um valor.")
+                    donation_controls = ft.Column(visible=False, spacing=8)
+
+                    def make_handlers(receiver_id, value_field, msg_field, controls_container):
+                        def open_form(e):
+                            controls_container.visible = True
+                            self.update()
+
+                        def cancel(e):
+                            controls_container.visible = False
+                            value_field.value = ""
+                            msg_field.value = ""
+                            self.update()
+
+                        def confirm(e):
+                            if not value_field.value.strip():
+                                self.snackbar("Informe um valor para a doação.")
                                 return
+                            try:
+                                amount = float(value_field.value.replace(",", "."))
+                            except ValueError:
+                                self.snackbar("Valor inválido.")
+                                return
+
+                            message = msg_field.value.strip() or "Doação feita"
+
                             payload = {
-                                "ReceiverId": rid,
-                                "ProductId": prod.get("ProductId") or prod.get("id"),
-                                "Amount": float(dlg_value.value.replace(",", ".")),
-                                "Message": ""
+                                "DonorId": 0,
+                                "ReceiverId": receiver_id,
+                                "Amount": amount,
+                                "Date": str(datetime.now()),
+                                "Message": message,
                             }
+
+                            print("Enviando doação:", payload)  # debug no console
+
                             res = api_add_donation(payload)
                             if res is None:
                                 self.snackbar("Erro ao registrar doação.")
+                            elif isinstance(res, dict) and res.get("error"):
+                                self.snackbar(f"Erro ao registrar doação: {res.get('error')}")
                             else:
                                 self.snackbar("Doação realizada com sucesso!")
+                                controls_container.visible = False
+                                value_field.value = ""
+                                msg_field.value = ""
 
-                            dlg.open = False
                             self.update()
 
-                        dlg = ft.AlertDialog(
-                            title=ft.Text("Realizar Doação"),
-                            content=dlg_value,
-                            actions=[
-                                ft.TextButton("Cancelar", on_click=lambda e: close_dlg()),
-                                ft.ElevatedButton("Confirmar", on_click=confirm)
-                            ]
-                        )
+                        return open_form, confirm, cancel
 
-                        def close_dlg():
-                            dlg.open = False
-                            self.update()
+                    open_form, confirm, cancel = make_handlers(
+                        rid, value_tf, msg_tf, donation_controls
+                    )
 
-                        self.page.dialog = dlg
-                        dlg.open = True
-                        self.update()
+                    confirm_btn = ft.ElevatedButton(
+                        "Confirmar doação",
+                        bgcolor=self.PRIMARY,
+                        color=self.TEXT,
+                        on_click=confirm,
+                    )
+                    cancel_btn = ft.TextButton(
+                        "Cancelar",
+                        on_click=cancel,
+                        style=ft.ButtonStyle(color=self.ACCENT),
+                    )
+
+                    donation_controls.controls.extend(
+                        [
+                            value_tf,
+                            msg_tf,
+                            ft.Row(
+                                [confirm_btn, cancel_btn],
+                                alignment=ft.MainAxisAlignment.START,
+                            ),
+                        ]
+                    )
+
+                    donate_btn = ft.ElevatedButton(
+                        "Doar",
+                        bgcolor=self.PRIMARY,
+                        color=self.TEXT,
+                        on_click=open_form,
+                    )
 
                     prod_list.append(
                         ft.Container(
                             bgcolor="#3b0057",
                             padding=10,
                             border_radius=10,
-                            content=ft.Column([
-                                ft.Text(p.get("ProductName") or p.get("name"),
-                                        color="white", size=18),
-                                ft.Text(p.get("Description") or p.get("description"),
-                                        color="white"),
-                                ft.Text(f"Valor: R$ {float(p.get('Value') or p.get('value') or 0):.2f}",
-                                        color="white"),
-                                ft.Container(height=5),
-                                ft.ElevatedButton("Doar", bgcolor=self.PRIMARY, color=self.TEXT,
-                                                on_click=donate)
-                            ])
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        product_name,
+                                        color="white",
+                                        size=18,
+                                    ),
+                                    ft.Text(
+                                        product_desc,
+                                        color="white",
+                                    ),
+                                    ft.Text(
+                                        f"Valor sugerido: R$ {product_value:.2f}",
+                                        color="white",
+                                    ),
+                                    ft.Container(height=5),
+                                    donate_btn,
+                                    donation_controls,
+                                ],
+                                spacing=8,
+                            ),
                         )
                     )
 
-            # AGORA 100% correto
             expansion = ft.ExpansionTile(
                 title=ft.Text(receptor_nome, size=20, color=self.TEXT),
                 subtitle=ft.Text(receptor_desc, color=self.ACCENT),
